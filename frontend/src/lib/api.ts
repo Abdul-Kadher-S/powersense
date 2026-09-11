@@ -2,6 +2,8 @@
  * API client for HomeGuard AI backend.
  */
 
+import { handleMockRoute } from './mockData'
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 interface ApiOptions {
@@ -57,34 +59,62 @@ class ApiClient {
       config.body = isFormData ? (body as FormData) : JSON.stringify(body)
     }
 
-    const response = await fetch(`${this.baseUrl}${endpoint}`, config)
+    try {
+      const response = await fetch(`${this.baseUrl}${endpoint}`, config)
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-      throw new ApiError(
-        errorData.detail || `Request failed with status ${response.status}`,
-        response.status
-      )
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new ApiError(
+          errorData.detail || `Request failed with status ${response.status}`,
+          response.status
+        )
+      }
+
+      return await response.json()
+    } catch (err) {
+      // If backend is unreachable or throws network/fetch error (e.g. deployed to Vercel without backend deployed)
+      const isNetworkError =
+        err instanceof TypeError ||
+        (err instanceof Error &&
+          (err.message.toLowerCase().includes('fetch') ||
+            err.message.toLowerCase().includes('network') ||
+            err.message.toLowerCase().includes('failed')))
+
+      if (isNetworkError) {
+        console.warn(`[API] Backend at ${this.baseUrl} unreachable for ${endpoint}. Using built-in demo data fallback.`)
+        const mock = handleMockRoute(endpoint, options)
+        if (mock !== undefined) {
+          return mock as T
+        }
+      }
+      throw err
     }
-
-    return response.json()
   }
 
   // Auth
-  async login(email: string, password: string) {
-    const data = await this.request<{
-      token: string
-      user: { id: string; email: string; name: string; household_name: string }
-      message: string
-    }>('/api/demo/login', {
-      method: 'POST',
-      body: { email, password },
-    })
-    this.setToken(data.token)
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('homeguard_user', JSON.stringify(data.user))
+  async login(email: string, password: string): Promise<LoginResponse> {
+    try {
+      const data = await this.request<LoginResponse>('/api/demo/login', {
+        method: 'POST',
+        body: { email, password },
+      })
+      this.setToken(data.token)
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('homeguard_user', JSON.stringify(data.user))
+      }
+      return data
+    } catch (err) {
+      // Fallback: If user enters demo credentials and backend is unreachable
+      if (email === 'demo@homeguard.ai' && password === 'demo123') {
+        const mock = handleMockRoute('/api/demo/login', { method: 'POST' }) as LoginResponse
+        this.setToken(mock.token)
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('homeguard_user', JSON.stringify(mock.user))
+        }
+        return mock
+      }
+      throw err
     }
-    return data
   }
 
   logout() {
@@ -167,6 +197,12 @@ export class ApiError extends Error {
     super(message)
     this.status = status
   }
+}
+
+export interface LoginResponse {
+  token: string
+  user: { id: string; email: string; name: string; household_name: string }
+  message?: string
 }
 
 // ── Types ─────────────────────────────────────────────────────────
