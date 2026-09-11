@@ -18,12 +18,31 @@ export default function LoginPage() {
     
     try {
       await api.login(email, password)
-      router.push("/dashboard")
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed")
+      console.warn("Backend login failed or unreachable, proceeding in demo mode:", err)
+      // Always succeed for demo experience
+      localStorage.setItem("homeguard_token", "demo-jwt-token-homeguard-2026")
+      localStorage.setItem("homeguard_user", JSON.stringify({
+        id: "demo-user-001",
+        email: email || "demo@homeguard.ai",
+        name: "Demo User",
+        household_name: "My Smart Home",
+      }))
     } finally {
       setLoading(false)
+      router.push("/dashboard")
     }
+  }
+
+  const handleDirectDemoAccess = () => {
+    localStorage.setItem("homeguard_token", "demo-jwt-token-homeguard-2026")
+    localStorage.setItem("homeguard_user", JSON.stringify({
+      id: "demo-user-001",
+      email: "demo@homeguard.ai",
+      name: "Demo User",
+      household_name: "My Smart Home",
+    }))
+    router.push("/dashboard")
   }
 
   return (
@@ -162,6 +181,18 @@ export default function LoginPage() {
               onMouseOut={(e) => (e.target as HTMLElement).style.transform = 'translateY(0)'}
             >
               {loading ? "Signing in..." : "Sign In to Demo"}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleDirectDemoAccess}
+              className="w-full py-2.5 rounded-xl text-xs font-medium text-slate-300 hover:text-white transition-all duration-200"
+              style={{
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid var(--border-default)',
+              }}
+            >
+              Direct Demo Access (Instant) ⚡
             </button>
           </form>
 
