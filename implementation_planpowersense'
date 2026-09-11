@@ -1,0 +1,357 @@
+# HomeGuard AI — Full-Stack MVP Implementation Plan
+
+**AI-powered preventive household intelligence platform**
+*Predict problems. Prevent costs.*
+
+## Overview
+
+Build a complete full-stack MVP with:
+- **Frontend**: Next.js + TypeScript + Tailwind CSS + shadcn/ui + Recharts
+- **Backend**: FastAPI + Python + scikit-learn
+- **Database**: Supabase PostgreSQL
+- **ML**: Real trained models (Random Forest) for electricity forecasting & appliance health
+- **OCR**: Gemini Vision API with manual-entry fallback
+
+> [!NOTE]
+> All electricity and appliance data is synthetic/demo data for hackathon demonstration purposes.
+
+---
+
+## Proposed Changes
+
+### Phase 1: Project Structure & Backend Foundation
+
+#### [NEW] `backend/` — FastAPI Backend
+
+```
+backend/
+├── app/
+│   ├── __init__.py
+│   ├── main.py                    # FastAPI app, CORS, lifespan
+│   ├── config.py                  # Environment variables (pydantic-settings)
+│   ├── api/
+│   │   ├── __init__.py
+│   │   ├── routes/
+│   │   │   ├── __init__.py
+│   │   │   ├── auth.py            # POST /api/demo/login
+│   │   │   ├── dashboard.py       # GET /api/dashboard
+│   │   │   ├── electricity.py     # GET/POST electricity endpoints
+│   │   │   ├── appliances.py      # CRUD + health prediction
+│   │   │   ├── bills.py           # POST /api/bills/upload (OCR)
+│   │   │   ├── insights.py        # GET/POST /api/ai/insight
+│   │   │   └── health.py          # GET /health
+│   │   └── dependencies.py        # Auth dependencies
+│   ├── schemas/
+│   │   ├── __init__.py
+│   │   ├── auth.py
+│   │   ├── electricity.py
+│   │   ├── appliance.py
+│   │   ├── bill.py
+│   │   ├── dashboard.py
+│   │   └── insight.py
+│   ├── services/
+│   │   ├── __init__.py
+│   │   ├── electricity_service.py
+│   │   ├── appliance_service.py
+│   │   ├── dashboard_service.py
+│   │   ├── ocr_service.py
+│   │   ├── insight_service.py
+│   │   └── explanation_engine.py  # Deterministic AI explanations
+│   ├── ml/
+│   │   ├── __init__.py
+│   │   ├── electricity_model.py   # Train + predict electricity
+│   │   ├── appliance_model.py     # Train + predict appliance health
+│   │   ├── train.py               # Training script
+│   │   ├── models/                # Saved .joblib models
+│   │   └── data/                  # Synthetic training CSVs
+│   ├── database/
+│   │   ├── __init__.py
+│   │   ├── supabase_client.py     # Supabase client
+│   │   ├── seed.py                # Seed demo data
+│   │   └── schema.sql             # SQL DDL for all tables
+│   └── utils/
+│       ├── __init__.py
+│       └── helpers.py
+├── requirements.txt
+├── Dockerfile
+├── .env.example
+└── README.md
+```
+
+**Key API Endpoints:**
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| `GET` | `/health` | Health check |
+| `POST` | `/api/demo/login` | Demo authentication |
+| `GET` | `/api/dashboard` | Aggregated dashboard data |
+| `GET` | `/api/electricity/history` | 12-month consumption history |
+| `GET` | `/api/electricity/prediction` | Next month prediction |
+| `POST` | `/api/electricity/anomaly` | Anomaly detection |
+| `GET` | `/api/appliances` | List all appliances |
+| `GET` | `/api/appliances/{id}` | Single appliance detail |
+| `POST` | `/api/appliances` | Add appliance |
+| `PUT` | `/api/appliances/{id}` | Update appliance |
+| `POST` | `/api/appliances/predict-health` | ML health prediction |
+| `POST` | `/api/bills/upload` | OCR bill processing |
+| `GET` | `/api/insights` | AI insights feed |
+| `GET` | `/api/recommendations` | Action center items |
+
+---
+
+### Phase 2: Database Schema (Supabase)
+
+#### [NEW] `backend/app/database/schema.sql`
+
+**Tables:**
+
+1. **`users`** — Demo user record
+2. **`electricity_readings`** — Monthly kWh + bill data (12 months)
+3. **`electricity_predictions`** — Stored predictions
+4. **`appliances`** — Appliance registry with metadata
+5. **`appliance_readings`** — Monthly energy readings per appliance
+6. **`maintenance_records`** — Maintenance history
+7. **`insights`** — Generated AI insights
+8. **`uploaded_bills`** — OCR upload records
+9. **`recommendations`** — Action center items
+
+**Key relationships:**
+- `electricity_readings` → `users` (user_id FK)
+- `appliances` → `users` (user_id FK)
+- `appliance_readings` → `appliances` (appliance_id FK)
+- `maintenance_records` → `appliances` (appliance_id FK)
+- All other tables reference `users`
+
+---
+
+### Phase 3: ML Pipeline
+
+#### [NEW] `backend/app/ml/electricity_model.py`
+
+**Electricity Forecasting:**
+- Algorithm: **Gradient Boosting Regressor**
+- Features: `month_index`, `month_of_year`, `rolling_avg_3`, `rolling_avg_6`, `prev_month`, `prev_2_month`, `seasonal_indicator`, `trend`
+- Training: 500+ synthetic household records with realistic seasonal patterns
+- Output: Predicted kWh + confidence range + estimated bill
+- Anomaly detection: Z-score based deviation from rolling baseline
+
+#### [NEW] `backend/app/ml/appliance_model.py`
+
+**Appliance Health Classification:**
+- Algorithm: **Random Forest Classifier**
+- Features: `age`, `usage_hours_daily`, `energy_consumption`, `energy_change_pct`, `maintenance_gap_months`, `maintenance_frequency`, `reported_issues`, `usage_intensity`
+- Target: `Healthy` / `Moderate Risk` / `High Risk`
+- Training: 1000+ synthetic appliance records
+- Output: `health_score` (0-100), `risk_level`, `failure_probability`, `contributing_factors[]`, `recommendation`
+
+#### [NEW] `backend/app/ml/train.py`
+
+Script to generate synthetic data and train both models. Models saved as `.joblib` files.
+
+---
+
+### Phase 4: AI Explanation Engine
+
+#### [NEW] `backend/app/services/explanation_engine.py`
+
+**Deterministic explanation system** (works without LLM):
+- Analyzes feature importances from Random Forest
+- Maps top contributing factors to human-readable explanations
+- Generates contextual recommendations based on risk factors
+- Connects electricity anomalies to specific appliance degradation
+
+**Example output:**
+```
+Why is your refrigerator at risk?
+1. Appliance age (4 years) is above typical baseline
+2. Energy consumption increased 18% over recent months
+3. No maintenance performed in 9 months
+
+Recommended: Check door seal and condenser. Schedule professional maintenance.
+```
+
+**Electricity ↔ Appliance Connection:**
+- When electricity anomaly detected, cross-reference with appliance energy trends
+- Identify top contributing appliances by energy change
+- Generate connected insight: "Consumption up 24% — Refrigerator is strongest contributor (+18% energy)"
+
+---
+
+### Phase 5: Frontend Application
+
+#### [NEW] `frontend/` — Next.js Application
+
+```
+frontend/
+├── src/
+│   ├── app/
+│   │   ├── layout.tsx
+│   │   ├── page.tsx               # Redirect to login
+│   │   ├── login/page.tsx
+│   │   ├── dashboard/page.tsx
+│   │   ├── electricity/page.tsx
+│   │   ├── appliances/
+│   │   │   ├── page.tsx
+│   │   │   └── [id]/page.tsx
+│   │   ├── insights/page.tsx
+│   │   ├── actions/page.tsx       # Action Center
+│   │   └── upload/page.tsx        # Data Upload
+│   ├── components/
+│   │   ├── layout/
+│   │   │   ├── Sidebar.tsx
+│   │   │   ├── MobileNav.tsx
+│   │   │   └── AppLayout.tsx
+│   │   ├── dashboard/
+│   │   │   ├── HomeHealthScore.tsx
+│   │   │   ├── StatCards.tsx
+│   │   │   ├── QuickInsights.tsx
+│   │   │   └── ConsumptionMiniChart.tsx
+│   │   ├── electricity/
+│   │   │   ├── ConsumptionChart.tsx
+│   │   │   ├── PredictionCard.tsx
+│   │   │   ├── AnomalyIndicator.tsx
+│   │   │   └── BillEstimate.tsx
+│   │   ├── appliances/
+│   │   │   ├── ApplianceCard.tsx
+│   │   │   ├── HealthGauge.tsx
+│   │   │   ├── RiskFactors.tsx
+│   │   │   └── EnergyTrendChart.tsx
+│   │   ├── insights/
+│   │   │   └── InsightCard.tsx
+│   │   ├── upload/
+│   │   │   ├── BillUploader.tsx
+│   │   │   ├── ManualEntryForm.tsx
+│   │   │   └── ApplianceForm.tsx
+│   │   └── ui/                    # shadcn/ui components
+│   ├── lib/
+│   │   ├── api.ts                 # API client
+│   │   ├── types.ts               # TypeScript interfaces
+│   │   └── utils.ts
+│   └── hooks/
+│       ├── useAuth.ts
+│       └── useDashboard.ts
+├── public/
+├── tailwind.config.ts
+├── next.config.js
+├── .env.example
+├── package.json
+└── tsconfig.json
+```
+
+**Pages (7 total):**
+
+| Page | Key Components | Data Source |
+|------|---------------|-------------|
+| Login | Demo credentials, branding | `POST /api/demo/login` |
+| Dashboard | Health score, stat cards, mini charts, quick insights | `GET /api/dashboard` |
+| Electricity | Monthly chart, prediction, anomaly, bill estimate | `GET /api/electricity/*` |
+| Appliances | Grid of appliance cards with health indicators | `GET /api/appliances` |
+| Appliance Detail | Health gauge, energy chart, risk factors, AI explanation | `GET /api/appliances/{id}` |
+| Insights | Chronological AI insight feed | `GET /api/insights` |
+| Action Center | Prioritized recommendations | `GET /api/recommendations` |
+| Upload | Bill OCR + manual entry + appliance form | `POST /api/bills/upload` |
+
+---
+
+### Phase 6: Demo Data Story
+
+The preloaded demo data tells this coherent story:
+
+**Electricity** (Sep 2025 → Aug 2026):
+- Gradual increase from ~180 kWh to ~310 kWh
+- Summer spike (May-Aug) due to AC usage
+- Anomaly: September consumption 24% above rolling baseline
+
+**Appliances:**
+
+| Appliance | Age | Health | Risk | Story |
+|-----------|-----|--------|------|-------|
+| Refrigerator | 4yr | 64/100 | Moderate-High | Energy climbing +18%, no maintenance 10mo |
+| Air Conditioner | 3yr | 72/100 | Moderate | High summer usage, filter needs cleaning |
+| Washing Machine | 2yr | 91/100 | Healthy | Recent maintenance, stable energy |
+| Geyser | 5yr | 85/100 | Healthy | Seasonal use, maintained |
+| Microwave | 1yr | 95/100 | Healthy | New, normal usage |
+| Television | 3yr | 88/100 | Healthy | Stable consumption |
+
+**Connected Insight:** "Electricity up 24% → Refrigerator (+18% energy) is strongest contributor → Health: 64/100 → Schedule maintenance"
+
+---
+
+### Phase 7: OCR Integration
+
+#### [NEW] `backend/app/services/ocr_service.py`
+
+- Primary: Gemini Vision API (gemini-1.5-flash)
+- Extracts: billing_period, units_consumed, bill_amount, meter_number
+- Fallback: Manual entry form if OCR fails
+- File validation: Only PDF/JPG/JPEG/PNG, max 10MB
+- Frontend shows editable extracted fields before saving
+
+---
+
+### Phase 8: Deployment Configuration
+
+#### Backend (Render)
+- `Dockerfile` with Python 3.11, scikit-learn, uvicorn
+- `requirements.txt` with all dependencies
+- Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+- Health endpoint: `GET /health`
+
+#### Frontend (Vercel)
+- Standard Next.js deployment
+- `NEXT_PUBLIC_API_URL` environment variable
+- No special configuration needed
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> **Supabase Setup**: Do you already have a Supabase project set up, or should I design the backend to work with a local SQLite fallback for development (with Supabase as the production target)?
+
+> [!IMPORTANT]  
+> **Gemini API Key**: Do you have a Gemini API key for the OCR feature? The app will have a manual-entry fallback regardless, but I need to know whether to configure the Gemini integration now.
+
+> [!IMPORTANT]
+> **Deployment Timeline**: Should I set up the actual Vercel/Render deployment configs, or focus on making it run locally first and leave deployment as documented instructions?
+
+## Open Questions
+
+1. **Currency**: The spec mentions ₹ (INR). Should all bill amounts be in Indian Rupees with a rate of approximately ₹8/kWh?
+2. **shadcn/ui version**: Should I use the latest shadcn/ui with the CLI installer, or a specific version?
+3. **Do you want the ML model training to run automatically** on backend startup, or as a separate manual step (`python -m app.ml.train`)?
+
+---
+
+## Verification Plan
+
+### Automated Tests
+```bash
+# Backend
+cd backend && python -m pytest tests/ -v
+
+# ML model training verification
+cd backend && python -m app.ml.train
+
+# Frontend build
+cd frontend && npm run build
+```
+
+### Manual Verification
+- Demo login flow → Dashboard → Electricity → Appliances → Insights → Upload
+- Verify all charts render with real data
+- Verify ML predictions return sensible results
+- Verify OCR upload workflow (with fallback)
+- Test responsive design at 1440px, 1024px, 768px, 390px
+- Verify all API endpoints return proper responses
+- Verify error states display correctly
+
+### End-to-End Hackathon Demo Flow
+1. Login with `demo@homeguard.ai` / `demo123`
+2. Dashboard shows Home Health Score 82/100
+3. Electricity page shows 12-month trend + prediction
+4. Appliance page shows 6 appliances with health scores
+5. Refrigerator detail shows 64/100 health, risk factors, AI explanation
+6. Connected insight: electricity ↔ refrigerator correlation
+7. Upload demo bill → OCR extracts → confirm → saves
+8. Action center shows prioritized recommendations
